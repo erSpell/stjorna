@@ -1,3 +1,5 @@
+import { useMemo, useState, type CSSProperties } from 'react'
+
 type CalendarSourceType = 'google' | 'calendly' | 'outlook' | 'ics' | 'local'
 
 type CalendarSource = {
@@ -14,27 +16,27 @@ type UnifiedCalendarEvent = {
   sourceId: string
   externalId: string
   title: string
+  day: number
   start: string
   end: string
   location?: string
   status: 'confirmed' | 'tentative' | 'cancelled'
 }
 
+type MiniMonth = {
+  name: string
+  activeDay?: number
+  days: number
+  startsOn: number
+}
+
 const sources: CalendarSource[] = [
   {
-    id: 'google-personal',
+    id: 'google-calendar',
     type: 'google',
     name: 'Google Calendar',
-    label: 'Personal Gmail',
-    color: '#7c3aed',
-    connected: true,
-  },
-  {
-    id: 'google-work',
-    type: 'google',
-    name: 'Google Calendar',
-    label: 'Work Gmail',
-    color: '#0891b2',
+    label: 'Gmail calendars',
+    color: '#4aa8ff',
     connected: true,
   },
   {
@@ -42,7 +44,7 @@ const sources: CalendarSource[] = [
     type: 'calendly',
     name: 'Calendly',
     label: 'Scheduling page',
-    color: '#0ea5e9',
+    color: '#45d6b5',
     connected: true,
   },
   {
@@ -50,7 +52,7 @@ const sources: CalendarSource[] = [
     type: 'outlook',
     name: 'Outlook',
     label: 'Microsoft 365',
-    color: '#2563eb',
+    color: '#6f9cff',
     connected: false,
   },
   {
@@ -58,7 +60,7 @@ const sources: CalendarSource[] = [
     type: 'ics',
     name: 'ICS feed',
     label: 'Subscription URL',
-    color: '#f97316',
+    color: '#ffba5a',
     connected: false,
   },
 ]
@@ -66,20 +68,22 @@ const sources: CalendarSource[] = [
 const events: UnifiedCalendarEvent[] = [
   {
     id: '1',
-    sourceId: 'google-personal',
+    sourceId: 'google-calendar',
     externalId: 'google-personal-1',
     title: 'Morning workout',
-    start: '08:00',
-    end: '09:00',
+    day: 1,
+    start: '8:00a',
+    end: '9:00a',
     status: 'confirmed',
   },
   {
     id: '2',
-    sourceId: 'google-work',
+    sourceId: 'google-calendar',
     externalId: 'google-work-1',
     title: 'NOC handoff review',
-    start: '10:30',
-    end: '11:00',
+    day: 3,
+    start: '10:30a',
+    end: '11:00a',
     location: 'Meet',
     status: 'confirmed',
   },
@@ -88,153 +92,246 @@ const events: UnifiedCalendarEvent[] = [
     sourceId: 'calendly-main',
     externalId: 'calendly-1',
     title: 'Intro call with recruiter',
-    start: '12:00',
-    end: '12:30',
+    day: 13,
+    start: '12:00p',
+    end: '12:30p',
     location: 'Calendly Zoom',
     status: 'confirmed',
   },
   {
     id: '4',
-    sourceId: 'google-work',
+    sourceId: 'google-calendar',
     externalId: 'google-work-2',
-    title: 'Data center maintenance window',
-    start: '13:00',
-    end: '14:30',
+    title: 'Maintenance window',
+    day: 17,
+    start: '1:00p',
+    end: '2:30p',
     status: 'tentative',
   },
   {
     id: '5',
-    sourceId: 'google-personal',
+    sourceId: 'google-calendar',
     externalId: 'google-personal-2',
     title: 'Dinner with family',
-    start: '18:30',
-    end: '20:00',
+    day: 24,
+    start: '6:30p',
+    end: '8:00p',
     location: 'Columbus',
+    status: 'confirmed',
+  },
+  {
+    id: '6',
+    sourceId: 'ics-coming-soon',
+    externalId: 'holiday-good-friday',
+    title: 'Good Friday',
+    day: 25,
+    start: 'All day',
+    end: '',
     status: 'confirmed',
   },
 ]
 
-const weekDays = [
-  { day: 'Mon', date: 15 },
-  { day: 'Tue', date: 16 },
-  { day: 'Wed', date: 17 },
-  { day: 'Thu', date: 18 },
-  { day: 'Fri', date: 19 },
-  { day: 'Sat', date: 20 },
-  { day: 'Sun', date: 21 },
+const miniMonths: MiniMonth[] = [
+  { name: 'January 2026', days: 31, startsOn: 4, activeDay: 17 },
+  { name: 'February 2026', days: 28, startsOn: 0, activeDay: 14 },
+  { name: 'March 2026', days: 31, startsOn: 0, activeDay: 13 },
+  { name: 'April 2026', days: 30, startsOn: 3, activeDay: 25 },
+  { name: 'May 2026', days: 31, startsOn: 5, activeDay: 2 },
 ]
+
+const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const miniWeekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const calendarCells = Array.from({ length: 35 }, (_, index) => {
+  const day = index - 1
+
+  if (index === 0) return { label: 'Feb 28', day: undefined, muted: true }
+  if (day > 31) return { label: String(day - 31), day: undefined, muted: true }
+
+  return { label: String(day), day, muted: false }
+})
 
 function sourceForEvent(sourceId: string) {
   return sources.find((source) => source.id === sourceId) ?? sources[0]
 }
 
+function eventsForDay(day?: number) {
+  return events.filter((event) => event.day === day)
+}
+
 function App() {
+  const [glassOpacity, setGlassOpacity] = useState(72)
+  const [accentColor, setAccentColor] = useState('#4aa8ff')
+  const [tintColor, setTintColor] = useState('#10233f')
+
   const connectedSources = sources.filter((source) => source.connected)
+  const shellStyle = useMemo(
+    () =>
+      ({
+        '--glass-opacity': glassOpacity / 100,
+        '--accent-color': accentColor,
+        '--tint-color': tintColor,
+      }) as CSSProperties,
+    [accentColor, glassOpacity, tintColor],
+  )
 
   return (
-    <main className="app-shell">
-      <section className="hero panel">
-        <div>
-          <p className="eyebrow">Stjorna</p>
-          <h1>One desktop calendar for every scheduling source.</h1>
-          <p className="hero-copy">
-            This first version uses mock data from Google Calendar and Calendly
-            so we can shape the aggregator before wiring in live sync.
-          </p>
-        </div>
-        <div className="hero-actions">
-          <button type="button" className="primary-action">
-            Connect source
-          </button>
-          <button type="button" className="secondary-action">
-            Refresh calendars
-          </button>
-        </div>
-      </section>
-
-      <section className="dashboard-grid">
-        <aside className="panel sidebar">
-          <div className="section-heading">
-            <span>Sources</span>
-            <strong>{connectedSources.length}/{sources.length}</strong>
-          </div>
-          <div className="source-list">
-            {sources.map((source) => (
-              <article className="source-card" key={source.id}>
-                <span
-                  className="source-dot"
-                  style={{ backgroundColor: source.color }}
-                />
-                <div>
-                  <h2>{source.name}</h2>
-                  <p>{source.label}</p>
-                </div>
-                <span className={source.connected ? 'badge online' : 'badge'}>
-                  {source.connected ? 'Synced' : 'Coming soon'}
-                </span>
-              </article>
-            ))}
-          </div>
-
-          <div className="sync-card">
-            <p className="eyebrow">Next milestone</p>
-            <h2>Connector-based sync</h2>
-            <p>
-              Add read-only connectors for Google Calendar, Calendly, and ICS
-              feeds, then normalize everything into one event model.
-            </p>
-          </div>
-        </aside>
-
-        <section className="panel calendar-panel">
-          <div className="calendar-header">
+    <main className="desktop-stage" style={shellStyle}>
+      <section className="calendar-shell" aria-label="Stjorna desktop calendar">
+        <header className="window-bar">
+          <div className="brand-cluster">
+            <span className="app-icon">✦</span>
             <div>
-              <p className="eyebrow">Unified week</p>
-              <h2>July 15–21</h2>
-            </div>
-            <div className="view-switcher" aria-label="Calendar view selector">
-              <button type="button" className="active">Week</button>
-              <button type="button">Month</button>
-              <button type="button">Agenda</button>
+              <p>Stjorna</p>
+              <span>Unified desktop calendar</span>
             </div>
           </div>
+          <nav className="view-tabs" aria-label="Calendar views">
+            <button type="button">Day</button>
+            <button type="button">Week</button>
+            <button type="button" className="active">Month</button>
+          </nav>
+          <div className="window-actions" aria-label="Window controls">
+            <button type="button">─</button>
+            <button type="button">□</button>
+            <button type="button">×</button>
+          </div>
+        </header>
 
-          <div className="week-grid">
-            {weekDays.map((day, index) => (
-              <div className="day-column" key={day.day}>
-                <div className={index === 2 ? 'day-label today' : 'day-label'}>
-                  <span>{day.day}</span>
-                  <strong>{day.date}</strong>
+        <div className="calendar-layout">
+          <aside className="left-rail">
+            <p className="rail-title">Navigation Pane</p>
+            {miniMonths.map((month) => (
+              <section className="mini-month" key={month.name}>
+                <h2>{month.name}</h2>
+                <div className="mini-grid weekdays">
+                  {miniWeekdays.map((day) => <span key={day}>{day}</span>)}
                 </div>
-                {index === 2 ? (
-                  <div className="day-events">
-                    {events.map((event) => {
-                      const source = sourceForEvent(event.sourceId)
-                      return (
-                        <article
-                          className="calendar-event"
-                          key={event.id}
-                          style={{ borderColor: source.color }}
-                        >
-                          <div className="event-time">
-                            {event.start}–{event.end}
-                          </div>
-                          <h3>{event.title}</h3>
-                          <p>
-                            {source.name} · {source.label}
-                            {event.location ? ` · ${event.location}` : ''}
-                          </p>
-                        </article>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="empty-day">No events</div>
-                )}
-              </div>
+                <div className="mini-grid">
+                  {Array.from({ length: month.startsOn }).map((_, index) => (
+                    <span aria-hidden="true" key={`blank-${month.name}-${index}`} />
+                  ))}
+                  {Array.from({ length: month.days }, (_, index) => index + 1).map((day) => (
+                    <span className={day === month.activeDay ? 'picked' : ''} key={day}>
+                      {day}
+                    </span>
+                  ))}
+                </div>
+              </section>
             ))}
-          </div>
-        </section>
+          </aside>
+
+          <section className="month-panel">
+            <div className="month-toolbar">
+              <div className="month-nav">
+                <button type="button">‹</button>
+                <button type="button">›</button>
+                <h1>March 2026</h1>
+              </div>
+              <div className="toolbar-actions">
+                <button type="button">🔍</button>
+                <button type="button">Today</button>
+                <button type="button">⚙ Settings</button>
+              </div>
+            </div>
+
+            <div className="month-grid" aria-label="March 2026 month view">
+              {weekdays.map((day) => <div className="weekday-heading" key={day}>{day}</div>)}
+              {calendarCells.map((cell, index) => {
+                const dayEvents = eventsForDay(cell.day)
+                return (
+                  <article className={cell.muted ? 'day-cell muted' : 'day-cell'} key={`${cell.label}-${index}`}>
+                    <span className="date-number">{cell.label}</span>
+                    <div className="event-stack">
+                      {dayEvents.map((event) => {
+                        const source = sourceForEvent(event.sourceId)
+                        return (
+                          <div
+                            className="event-pill"
+                            key={event.id}
+                            style={{ '--event-color': source.color } as CSSProperties}
+                          >
+                            <strong>{event.start}</strong>
+                            <span>{event.title}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+
+          <aside className="right-rail">
+            <section className="side-card">
+              <div className="section-heading">
+                <h2>Upcoming Events</h2>
+                <span>{events.length}</span>
+              </div>
+              <div className="agenda-list">
+                {events.slice(1, 6).map((event) => {
+                  const source = sourceForEvent(event.sourceId)
+                  return (
+                    <article className="agenda-item" key={event.id}>
+                      <span style={{ backgroundColor: source.color }} />
+                      <div>
+                        <strong>{event.start || 'All day'} {event.title}</strong>
+                        <p>{source.name} · {source.label}</p>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </section>
+
+            <section className="side-card sources-card">
+              <div className="section-heading">
+                <h2>Sources</h2>
+                <span>{connectedSources.length}/{sources.length}</span>
+              </div>
+              {sources.map((source) => (
+                <div className="source-row" key={source.id}>
+                  <span style={{ backgroundColor: source.color }} />
+                  <p>{source.name}</p>
+                  <em>{source.connected ? 'on' : 'soon'}</em>
+                </div>
+              ))}
+            </section>
+
+            <section className="side-card appearance-card">
+              <div className="section-heading">
+                <h2>Appearance</h2>
+              </div>
+              <label>
+                <span>Window opacity</span>
+                <input
+                  max="92"
+                  min="35"
+                  onChange={(event) => setGlassOpacity(Number(event.target.value))}
+                  type="range"
+                  value={glassOpacity}
+                />
+                <strong>{glassOpacity}%</strong>
+              </label>
+              <label>
+                <span>Accent color</span>
+                <input
+                  onChange={(event) => setAccentColor(event.target.value)}
+                  type="color"
+                  value={accentColor}
+                />
+              </label>
+              <label>
+                <span>Glass tint</span>
+                <input
+                  onChange={(event) => setTintColor(event.target.value)}
+                  type="color"
+                  value={tintColor}
+                />
+              </label>
+            </section>
+          </aside>
+        </div>
       </section>
     </main>
   )
