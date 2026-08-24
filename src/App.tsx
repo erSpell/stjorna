@@ -1,27 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react'
-
-type CalendarSourceType = 'google' | 'calendly' | 'outlook' | 'ics' | 'local'
-
-type CalendarSource = {
-  id: string
-  type: CalendarSourceType
-  name: string
-  label: string
-  color: string
-  connected: boolean
-}
-
-type UnifiedCalendarEvent = {
-  id: string
-  sourceId: string
-  externalId: string
-  title: string
-  day: number
-  start: string
-  end: string
-  location?: string
-  status: 'confirmed' | 'tentative' | 'cancelled'
-}
+import { mockCalendarEvents, mockCalendarSources } from './data/mockCalendar'
+import { getConnectedSources, eventsForDay, sourceForEvent } from './utils/calendarEvents'
 
 type MiniMonth = {
   name: string
@@ -29,107 +8,6 @@ type MiniMonth = {
   days: number
   startsOn: number
 }
-
-const sources: CalendarSource[] = [
-  {
-    id: 'google-calendar',
-    type: 'google',
-    name: 'Google Calendar',
-    label: 'Gmail calendars',
-    color: '#4aa8ff',
-    connected: true,
-  },
-  {
-    id: 'calendly-main',
-    type: 'calendly',
-    name: 'Calendly',
-    label: 'Scheduling page',
-    color: '#45d6b5',
-    connected: true,
-  },
-  {
-    id: 'outlook-coming-soon',
-    type: 'outlook',
-    name: 'Outlook',
-    label: 'Microsoft 365',
-    color: '#6f9cff',
-    connected: false,
-  },
-  {
-    id: 'ics-coming-soon',
-    type: 'ics',
-    name: 'ICS feed',
-    label: 'Subscription URL',
-    color: '#ffba5a',
-    connected: false,
-  },
-]
-
-const events: UnifiedCalendarEvent[] = [
-  {
-    id: '1',
-    sourceId: 'google-calendar',
-    externalId: 'google-personal-1',
-    title: 'Morning workout',
-    day: 1,
-    start: '8:00a',
-    end: '9:00a',
-    status: 'confirmed',
-  },
-  {
-    id: '2',
-    sourceId: 'google-calendar',
-    externalId: 'google-work-1',
-    title: 'NOC handoff review',
-    day: 3,
-    start: '10:30a',
-    end: '11:00a',
-    location: 'Meet',
-    status: 'confirmed',
-  },
-  {
-    id: '3',
-    sourceId: 'calendly-main',
-    externalId: 'calendly-1',
-    title: 'Intro call with recruiter',
-    day: 13,
-    start: '12:00p',
-    end: '12:30p',
-    location: 'Calendly Zoom',
-    status: 'confirmed',
-  },
-  {
-    id: '4',
-    sourceId: 'google-calendar',
-    externalId: 'google-work-2',
-    title: 'Maintenance window',
-    day: 17,
-    start: '1:00p',
-    end: '2:30p',
-    status: 'tentative',
-  },
-  {
-    id: '5',
-    sourceId: 'google-calendar',
-    externalId: 'google-personal-2',
-    title: 'Dinner with family',
-    day: 24,
-    start: '6:30p',
-    end: '8:00p',
-    location: 'Columbus',
-    status: 'confirmed',
-  },
-  {
-    id: '6',
-    sourceId: 'ics-coming-soon',
-    externalId: 'holiday-good-friday',
-    title: 'Good Friday',
-    day: 25,
-    start: 'All day',
-    end: '',
-    status: 'confirmed',
-  },
-]
 
 const miniMonths: MiniMonth[] = [
   { name: 'January 2026', days: 31, startsOn: 4, activeDay: 17 },
@@ -150,20 +28,14 @@ const calendarCells = Array.from({ length: 35 }, (_, index) => {
   return { label: String(day), day, muted: false }
 })
 
-function sourceForEvent(sourceId: string) {
-  return sources.find((source) => source.id === sourceId) ?? sources[0]
-}
-
-function eventsForDay(day?: number) {
-  return events.filter((event) => event.day === day)
-}
-
 function App() {
   const [glassOpacity, setGlassOpacity] = useState(72)
   const [accentColor, setAccentColor] = useState('#4aa8ff')
   const [tintColor, setTintColor] = useState('#10233f')
 
-  const connectedSources = sources.filter((source) => source.connected)
+  const sources = mockCalendarSources
+  const events = mockCalendarEvents
+  const connectedSourceList = getConnectedSources(sources)
   const shellStyle = useMemo(
     () =>
       ({
@@ -237,13 +109,13 @@ function App() {
             <div className="month-grid" aria-label="March 2026 month view">
               {weekdays.map((day) => <div className="weekday-heading" key={day}>{day}</div>)}
               {calendarCells.map((cell, index) => {
-                const dayEvents = eventsForDay(cell.day)
+                const dayEvents = eventsForDay(events, cell.day)
                 return (
                   <article className={cell.muted ? 'day-cell muted' : 'day-cell'} key={`${cell.label}-${index}`}>
                     <span className="date-number">{cell.label}</span>
                     <div className="event-stack">
                       {dayEvents.map((event) => {
-                        const source = sourceForEvent(event.sourceId)
+                        const source = sourceForEvent(sources, event.sourceId)
                         return (
                           <div
                             className="event-pill"
@@ -270,7 +142,7 @@ function App() {
               </div>
               <div className="agenda-list">
                 {events.slice(1, 6).map((event) => {
-                  const source = sourceForEvent(event.sourceId)
+                  const source = sourceForEvent(sources, event.sourceId)
                   return (
                     <article className="agenda-item" key={event.id}>
                       <span style={{ backgroundColor: source.color }} />
@@ -287,7 +159,7 @@ function App() {
             <section className="side-card sources-card">
               <div className="section-heading">
                 <h2>Sources</h2>
-                <span>{connectedSources.length}/{sources.length}</span>
+                <span>{connectedSourceList.length}/{sources.length}</span>
               </div>
               {sources.map((source) => (
                 <div className="source-row" key={source.id}>
